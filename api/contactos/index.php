@@ -3,15 +3,8 @@ require_once __DIR__ . '/../_cors.php';
 header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-$dbPath = __DIR__ . '/../../config/db.php';
-$jwtPath = __DIR__ . '/../../config/jwt.php';
-if (!file_exists($dbPath) || !file_exists($jwtPath)) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Configuración del servidor no encontrada']);
-    exit;
-}
-require_once $dbPath;
-require_once $jwtPath;
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/jwt.php';
 
 $headers = function_exists('getallheaders') ? getallheaders() : [];
 $auth = $headers['Authorization'] ?? $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTHORIZATION'] ?? $_SERVER['HTTP_X_AUTH_TOKEN'] ?? '';
@@ -35,10 +28,7 @@ if (!$auth || !preg_match('/Bearer\s(\S+)/', $auth, $m)) {
 }
 $token = $m[1];
 
-$env = [];
-$envFile = __DIR__ . '/../../.env';
-if (file_exists($envFile)) $env = parse_ini_file($envFile) ?: [];
-$secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?? '';
+$secret = getenv('JWT_SECRET') ?: '';
 if ($secret === '') {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server configuration error']);
@@ -47,21 +37,14 @@ if ($secret === '') {
 
 $payload = jwt_validate($token, $secret);
 if (!$payload) {
-    try {
-        $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
-        $stmt->execute([$token]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($user && !empty($user['id'])) {
-            $payload = ['sub' => $user['id']];
-        } else {
-            http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Invalid token']);
-            exit;
-        }
-    } catch (Throwable $e) {
-        error_log(date('c') . " index.php token fallback error: " . $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
+    $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
+    $stmt->execute([$token]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($user && !empty($user['id'])) {
+        $payload = ['sub' => $user['id']];
+    } else {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Invalid token']);
         exit;
     }
 }
@@ -73,7 +56,7 @@ if ($usuario_id <= 0) {
     exit;
 }
 
-$envBase = rtrim($env['BASE_URL'] ?? getenv('BASE_URL'), '/');
+$envBase = rtrim(getenv('BASE_URL') ?: '', '/');
 $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $basePath = rtrim(dirname(dirname(dirname($_SERVER['SCRIPT_NAME']))), '/\\');
@@ -131,15 +114,9 @@ try {
             $candidate2 = $uploadsRootReal . '/' . $safeBase;
             $resolved = null;
             if (is_file($candidate)) {
-                $real = realpath($candidate);
-                if ($real !== false && strpos($real, $uploadsRootReal) === 0) {
-                    $resolved = rtrim($uploadsPublicBase, '/') . '/contactos/' . $name;
-                }
+                $resolved = rtrim($uploadsPublicBase, '/') . '/contactos/' . $name;
             } elseif (is_file($candidate2)) {
-                $real = realpath($candidate2);
-                if ($real !== false && strpos($real, $uploadsRootReal) === 0) {
-                    $resolved = rtrim($uploadsPublicBase, '/') . '/' . $name;
-                }
+                $resolved = rtrim($uploadsPublicBase, '/') . '/' . $name;
             }
             $r['foto'] = $resolved;
         }
@@ -158,7 +135,6 @@ try {
     echo json_encode(['success' => true, 'data' => ['total' => $total, 'page' => $page, 'limit' => $limit, 'contacts' => $result]]);
     exit;
 } catch (Throwable $e) {
-    error_log(date('c') . " index.php error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
     exit;

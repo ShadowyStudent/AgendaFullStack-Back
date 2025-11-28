@@ -3,14 +3,6 @@ require_once __DIR__ . '/../_cors.php';
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../config/db.php';
 
-function safe_log($text, $context = '') {
-    $dir = __DIR__ . '/../../logs';
-    if (!is_dir($dir)) mkdir($dir, 0770, true);
-    $safeContext = is_string($context) ? preg_replace('/("password"\s*:\s*)"([^"]*)"/i', '$1"[FILTERED]"', $context) : '';
-    $entry = date('c') . ' ' . $text . ($safeContext !== '' ? ' | ' . substr($safeContext, 0, 1000) : '') . PHP_EOL;
-    file_put_contents($dir . '/error.log', $entry, FILE_APPEND);
-}
-
 function base64url_encode($data) {
     return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
 }
@@ -70,10 +62,7 @@ try {
         exit;
     }
 
-    $envFile = __DIR__ . '/../../.env';
-    $env = [];
-    if (file_exists($envFile)) $env = parse_ini_file($envFile) ?: [];
-    $secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?? '';
+    $secret = getenv('JWT_SECRET') ?: '';
     if ($secret === '') {
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Server misconfiguration'], JSON_UNESCAPED_UNICODE);
@@ -96,7 +85,6 @@ try {
     exit;
 } catch (Throwable $e) {
     http_response_code(500);
-    safe_log('login error', json_encode(['error' => $e->getMessage(), 'input' => substr($raw ?? '', 0, 1000)]));
     echo json_encode(['success' => false, 'message' => 'Error interno'], JSON_UNESCAPED_UNICODE);
     exit;
 }

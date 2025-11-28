@@ -4,14 +4,6 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../config/jwt.php';
 
-function safe_log($text, $context = '') {
-    $dir = __DIR__ . '/../../logs';
-    if (!is_dir($dir)) mkdir($dir, 0770, true);
-    $safeContext = is_string($context) ? preg_replace('/("password"\s*:\s*)"([^"]*)"/i', '$1"[FILTERED]"', $context) : '';
-    $entry = date('c') . ' ' . $text . ($safeContext !== '' ? ' | ' . substr($safeContext, 0, 1000) : '') . PHP_EOL;
-    file_put_contents($dir . '/error.log', $entry, FILE_APPEND);
-}
-
 $authHeader = null;
 if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
@@ -38,10 +30,7 @@ if ($authHeader) {
 }
 
 $userId = false;
-$envFile = __DIR__ . '/../../.env';
-$env = [];
-if (file_exists($envFile)) $env = parse_ini_file($envFile) ?: [];
-$secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?? '';
+$secret = getenv('JWT_SECRET') ?: '';
 if ($secret === '') {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server configuration error'], JSON_UNESCAPED_UNICODE);
@@ -53,16 +42,11 @@ if (!empty($authHeader)) {
     if ($payload && !empty($payload['sub'])) {
         $userId = (int)$payload['sub'];
     } else {
-        try {
-            $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
-            $stmt->execute([$authHeader]);
-            $row = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($row && !empty($row['id'])) {
-                $userId = (int)$row['id'];
-            }
-        } catch (Throwable $e) {
-            safe_log('validate token error: ' . $e->getMessage());
-            $userId = false;
+        $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
+        $stmt->execute([$authHeader]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row && !empty($row['id'])) {
+            $userId = (int)$row['id'];
         }
     }
 }
@@ -127,7 +111,6 @@ if (!empty($_FILES['foto']) && isset($_FILES['foto']['error']) && $_FILES['foto'
     $destDir = realpath(__DIR__ . '/../../uploads/contactos') ?: (__DIR__ . '/../../uploads/contactos');
     if (!is_dir($destDir)) {
         if (!mkdir($destDir, 0755, true)) {
-            safe_log('mkdir failed: ' . $destDir);
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen'], JSON_UNESCAPED_UNICODE);
             exit;
@@ -137,7 +120,6 @@ if (!empty($_FILES['foto']) && isset($_FILES['foto']['error']) && $_FILES['foto'
     try {
         $fotoFilename = 'c_' . bin2hex(random_bytes(8)) . '.' . $ext;
     } catch (Throwable $e) {
-        safe_log('random_bytes failed: ' . $e->getMessage());
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen'], JSON_UNESCAPED_UNICODE);
         exit;
@@ -145,18 +127,15 @@ if (!empty($_FILES['foto']) && isset($_FILES['foto']['error']) && $_FILES['foto'
 
     $dest = $destDir . '/' . basename($fotoFilename);
     if (!move_uploaded_file($tmp, $dest)) {
-        safe_log('move_uploaded_file failed: ' . $tmp . ' -> ' . $dest);
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
-    // Ensure the moved file is inside the intended directory (avoid symlink tricks)
     $realDest = realpath($dest);
     $realDestDir = realpath($destDir);
     if ($realDest === false || $realDestDir === false || strpos($realDest, $realDestDir) !== 0) {
         @unlink($dest);
-        safe_log('Uploaded file outside destination dir: ' . $dest);
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen'], JSON_UNESCAPED_UNICODE);
         exit;
@@ -182,7 +161,7 @@ try {
 
     $fotoUrl = null;
     if ($fotoFilename !== null) {
-        $base = rtrim($env['BASE_URL'] ?? getenv('BASE_URL'), '/');
+        $base = rtrim(getenv('BASE_URL') ?: '', '/');
         $fotoUrl = $base . '/backend/uploads/contactos/' . rawurlencode(basename($fotoFilename));
     }
 
@@ -192,7 +171,6 @@ try {
     if (isset($pdo) && $pdo->inTransaction()) {
         try { $pdo->rollBack(); } catch (Throwable $_) {}
     }
-    safe_log('DB insert error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Error interno al crear contacto'], JSON_UNESCAPED_UNICODE);
     exit;

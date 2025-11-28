@@ -14,8 +14,7 @@ if (!preg_match('/Bearer\s(\S+)/', (string)$authHeader, $m)) {
 }
 $token = $m[1];
 
-$env = parse_ini_file(__DIR__ . '/../.env') ?: [];
-$secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?: '';
+$secret = getenv('JWT_SECRET') ?: '';
 if ($secret === '') {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server configuration error']);

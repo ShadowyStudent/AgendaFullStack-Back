@@ -6,23 +6,6 @@ require_once __DIR__ . '/_cors.php';
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 
-function log_error($text, $raw = '') {
-    $dir = __DIR__ . '/../../logs';
-    if (!is_dir($dir)) {
-        mkdir($dir, 0770, true);
-    }
-    $safeRaw = $raw;
-    if (is_string($safeRaw)) {
-        $safeRaw = preg_replace('/("password"\s*:\s*)"([^"]*)"/i', '$1"[FILTERED]"', $safeRaw);
-        $safeRaw = preg_replace('/("password"\s*:\s*)([^,\}\]]+)/i', '$1"[FILTERED]"', $safeRaw);
-        $safeRaw = substr($safeRaw, 0, 1000);
-    } else {
-        $safeRaw = '';
-    }
-    $entry = date('c') . " " . $text . ($safeRaw !== '' ? " RAW:" . $safeRaw : "") . PHP_EOL;
-    file_put_contents($dir . '/error.log', $entry, FILE_APPEND);
-}
-
 try {
     if (!isset($pdo)) {
         throw new Exception('No se pudo inicializar la conexión PDO');
@@ -82,7 +65,6 @@ try {
         try { $pdo->rollBack(); } catch (Throwable $_) {}
     }
     http_response_code(500);
-    log_error('Registrar error: ' . $e->getMessage(), $raw ?? '');
     echo json_encode(['success' => false, 'message' => 'Internal server error'], JSON_UNESCAPED_UNICODE);
     exit;
 }

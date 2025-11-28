@@ -9,8 +9,7 @@ function base64url_decode($data) {
 
 function jwt_validate($token, $secret = '') {
     if (empty($secret)) {
-        $env = parse_ini_file(__DIR__ . '/../.env') ?: [];
-        $secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?: '';
+        $secret = getenv('JWT_SECRET') ?: '';
     }
 
     $parts = explode('.', $token);

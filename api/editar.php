@@ -5,14 +5,6 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/jwt.php';
 
-function safe_log($text, $context = '') {
-    $dir = __DIR__ . '/../logs';
-    if (!is_dir($dir)) mkdir($dir, 0770, true);
-    $safeContext = is_string($context) ? preg_replace('/("password"\s*:\s*)"([^"]*)"/i', '$1"[FILTERED]"', $context) : '';
-    $entry = date('c') . ' ' . $text . ($safeContext !== '' ? ' | ' . substr($safeContext, 0, 1000) : '') . PHP_EOL;
-    file_put_contents($dir . '/error.log', $entry, FILE_APPEND);
-}
-
 $headers = function_exists('getallheaders') ? getallheaders() : [];
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
 if (!preg_match('/Bearer\s(\S+)/', (string)$authHeader, $m)) {
@@ -22,8 +14,7 @@ if (!preg_match('/Bearer\s(\S+)/', (string)$authHeader, $m)) {
 }
 $token = $m[1];
 
-$env = parse_ini_file(__DIR__ . '/../.env') ?: [];
-$secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?: '';
+$secret = getenv('JWT_SECRET') ?: '';
 if ($secret === '') {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server configuration error']);
@@ -144,7 +135,6 @@ if (!empty($_FILES['foto']) && isset($_FILES['foto']['error']) && $_FILES['foto'
         try {
             $filename = bin2hex(random_bytes(16)) . '.' . $ext;
         } catch (Throwable $e) {
-            safe_log('Random filename generation failed', $e->getMessage());
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Server error']);
             exit;
@@ -183,7 +173,6 @@ try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 } catch (Throwable $e) {
-    safe_log('EDITAR SQL ERROR', json_encode(['error' => $e->getMessage(), 'sql' => $sql, 'params' => $params]));
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server error']);
     exit;

@@ -3,23 +3,8 @@ require_once __DIR__ . '/../_cors.php';
 header('Content-Type: application/json; charset=utf-8');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-$dbPath = __DIR__ . '/../../config/db.php';
-$jwtPath = __DIR__ . '/../../config/jwt.php';
-if (!file_exists($dbPath) || !file_exists($jwtPath)) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Configuración no encontrada']);
-    exit;
-}
-require_once $dbPath;
-require_once $jwtPath;
-
-function safe_log($text, $context = '') {
-    $dir = __DIR__ . '/../../logs';
-    if (!is_dir($dir)) mkdir($dir, 0770, true);
-    $safeContext = is_string($context) ? preg_replace('/("password"\s*:\s*)"([^"]*)"/i', '$1"[FILTERED]"', $context) : '';
-    $entry = date('c') . ' ' . $text . ($safeContext !== '' ? ' | ' . substr($safeContext, 0, 1000) : '') . PHP_EOL;
-    file_put_contents($dir . '/error.log', $entry, FILE_APPEND);
-}
+require_once __DIR__ . '/../../config/db.php';
+require_once __DIR__ . '/../../config/jwt.php';
 
 $headers = function_exists('getallheaders') ? getallheaders() : [];
 $auth = $headers['Authorization'] ?? $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? '';
@@ -33,10 +18,7 @@ if (!$auth || !preg_match('/Bearer\s(\S+)/', (string)$auth, $m)) {
 }
 $token = $m[1];
 
-$env = [];
-$envFile = __DIR__ . '/../../.env';
-if (file_exists($envFile)) $env = parse_ini_file($envFile) ?: [];
-$secret = $env['JWT_SECRET'] ?? getenv('JWT_SECRET') ?? '';
+$secret = getenv('JWT_SECRET') ?: '';
 if ($secret === '') {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server configuration error']);
@@ -45,21 +27,14 @@ if ($secret === '') {
 
 $payload = jwt_validate($token, $secret);
 if (!$payload) {
-    try {
-        $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
-        $stmt->execute([$token]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($user && !empty($user['id'])) {
-            $payload = ['sub' => $user['id']];
-        } else {
-            http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Invalid token']);
-            exit;
-        }
-    } catch (Throwable $e) {
-        safe_log('Token fallback error', $e->getMessage());
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
+    $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
+    $stmt->execute([$token]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($user && !empty($user['id'])) {
+        $payload = ['sub' => $user['id']];
+    } else {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Invalid token']);
         exit;
     }
 }
@@ -112,7 +87,6 @@ $uploadsRoot = realpath(__DIR__ . '/../../uploads') ?: (__DIR__ . '/../../upload
 $contactosDir = $uploadsRoot . '/contactos';
 if (!is_dir($contactosDir)) {
     if (!mkdir($contactosDir, 0755, true) && !is_dir($contactosDir)) {
-        safe_log('mkdir failed: ' . $contactosDir);
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
         exit;
@@ -165,7 +139,6 @@ try {
         try {
             $newFotoName = 'c_' . bin2hex(random_bytes(8)) . '.' . $ext;
         } catch (Throwable $e) {
-            safe_log('random_bytes failed', $e->getMessage());
             $pdo->rollBack();
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Error interno al procesar la imagen']);
@@ -174,7 +147,6 @@ try {
 
         $dest = $contactosDirReal . '/' . basename($newFotoName);
         if (!move_uploaded_file($_FILES['foto']['tmp_name'], $dest)) {
-            safe_log('move_uploaded_file failed', json_encode(['tmp' => $_FILES['foto']['tmp_name'], 'dest' => $dest]));
             $pdo->rollBack();
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen']);
@@ -184,7 +156,6 @@ try {
         $realDest = realpath($dest);
         if ($realDest === false || strpos($realDest, $contactosDirReal) !== 0) {
             @unlink($dest);
-            safe_log('Uploaded file outside destination dir', $dest);
             $pdo->rollBack();
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen']);
@@ -197,7 +168,7 @@ try {
             $oldPath = $contactosDirReal . '/' . $oldName;
             $oldReal = realpath($oldPath);
             if ($oldReal !== false && strpos($oldReal, $contactosDirReal) === 0 && is_file($oldReal)) {
-                try { unlink($oldReal); } catch (Throwable $e) { safe_log('unlink old foto failed', $e->getMessage()); }
+                unlink($oldReal);
             }
         }
     }
@@ -217,48 +188,3 @@ try {
     }
     $sql .= ' WHERE id = ? AND usuario_id = ?';
     $params[] = $id;
-    $params[] = $usuario_id;
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-
-    if ($stmt->rowCount() === 0) {
-        $pdo->commit();
-        http_response_code(404);
-        echo json_encode(['success' => false, 'message' => 'Contacto no encontrado o no autorizado']);
-        exit;
-    }
-
-    $stmt = $pdo->prepare('SELECT id, nombre, apellido, telefono, email, direccion, notas, foto FROM contactos WHERE id = ? AND usuario_id = ? LIMIT 1');
-    $stmt->execute([$id, $usuario_id]);
-    $updated = $stmt->fetch(PDO::FETCH_ASSOC);
-    $pdo->commit();
-
-    if (!$updated) {
-        echo json_encode(['success' => true]);
-        exit;
-    }
-
-    $fotoUrl = null;
-    if (!empty($updated['foto'])) {
-        $fotoVal = $updated['foto'];
-        if (preg_match('#^https?://#i', $fotoVal)) {
-            $fotoUrl = $fotoVal;
-        } else {
-            $base = rtrim($env['BASE_URL'] ?? getenv('BASE_URL'), '/');
-            $fotoUrl = $base . '/backend/uploads/contactos/' . rawurlencode(basename($fotoVal));
-        }
-    }
-    $updated['foto'] = $fotoUrl;
-
-    echo json_encode(['success' => true, 'data' => $updated]);
-    exit;
-} catch (Throwable $e) {
-    if (isset($pdo) && $pdo->inTransaction()) {
-        try { $pdo->rollBack(); } catch (Throwable $_) {}
-    }
-    safe_log('update contacto error', $e->getMessage());
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
-    exit;
-}
