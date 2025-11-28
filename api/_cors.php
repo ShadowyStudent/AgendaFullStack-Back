@@ -1,11 +1,14 @@
 <?php
-$allowedOrigin = 'https://shadowystudent.github.io';
+$whitelist = [
+    'https://shadowystudent.github.io',
+    'https://agendafullstack.unaux.com'
+];
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if ($origin === $allowedOrigin) {
+if (in_array($origin, $whitelist, true)) {
     header("Access-Control-Allow-Origin: $origin");
 } else {
-    header("Access-Control-Allow-Origin: $allowedOrigin");
+    header("Access-Control-Allow-Origin: https://shadowystudent.github.io");
 }
 
 header('Access-Control-Allow-Credentials: true');
