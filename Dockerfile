@@ -10,4 +10,6 @@ COPY . /var/www/html/
 RUN a2enmod rewrite headers
 
 RUN chown -R www-data:www-data /var/www/html/uploads \
-    && chmod -R 755 /var/www/html/uploads
+    && chmod -R 755 /var/www/html/uploads \
+    && chmod -R 755 /var/www/html/uploads/contactos \
+    && chmod -R 755 /var/www/html/uploads/users

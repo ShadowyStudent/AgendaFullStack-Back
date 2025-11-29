@@ -47,12 +47,6 @@ if ($usuario_id <= 0) {
 }
 
 $input = $_POST;
-$raw = file_get_contents('php://input');
-if ((empty($input) || count($input) === 0) && $raw) {
-    $json = json_decode($raw, true);
-    if (is_array($json)) $input = $json;
-}
-
 $id = intval($input['id'] ?? 0);
 if ($id <= 0) {
     http_response_code(400);
@@ -60,39 +54,24 @@ if ($id <= 0) {
     exit;
 }
 
-$nombre = trim((string)($input['nombre'] ?? ''));
-$apellido = trim((string)($input['apellido'] ?? ''));
-$telefono = trim((string)($input['telefono'] ?? ''));
-$email = trim((string)($input['email'] ?? ''));
+$nombre    = trim((string)($input['nombre'] ?? ''));
+$apellido  = trim((string)($input['apellido'] ?? ''));
+$telefono  = trim((string)($input['telefono'] ?? ''));
+$email     = trim((string)($input['email'] ?? ''));
 $direccion = trim((string)($input['direccion'] ?? ''));
-$notas = trim((string)($input['notas'] ?? ''));
+$notas     = trim((string)($input['notas'] ?? ''));
 
 if ($nombre === '' || $telefono === '') {
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Nombre y teléfono son obligatorios']);
     exit;
 }
-if (mb_strlen($nombre) > 100 || mb_strlen($apellido) > 100 || mb_strlen($telefono) > 20 || mb_strlen($email) > 120 || mb_strlen($direccion) > 255) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Campos demasiado largos']);
-    exit;
-}
-if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Email inválido']);
-    exit;
-}
 
-$uploadsRoot = realpath(__DIR__ . '/../../uploads') ?: (__DIR__ . '/../../uploads');
-$contactosDir = $uploadsRoot . '/contactos';
+$contactosDir = __DIR__ . '/../../uploads/contactos';
 if (!is_dir($contactosDir)) {
-    if (!mkdir($contactosDir, 0755, true) && !is_dir($contactosDir)) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => 'Error interno del servidor']);
-        exit;
-    }
+    mkdir($contactosDir, 0755, true);
 }
-$contactosDirReal = realpath($contactosDir) ?: $contactosDir;
+$contactosDirReal = realpath($contactosDir);
 
 try {
     $pdo->beginTransaction();
@@ -108,7 +87,7 @@ try {
     }
 
     $newFotoName = null;
-    if (!empty($_FILES['foto']) && isset($_FILES['foto']['error']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK && is_uploaded_file($_FILES['foto']['tmp_name'])) {
+    if (!empty($_FILES['foto']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK && is_uploaded_file($_FILES['foto']['tmp_name'])) {
         if ($_FILES['foto']['size'] > 2 * 1024 * 1024) {
             $pdo->rollBack();
             http_response_code(400);
@@ -116,18 +95,7 @@ try {
             exit;
         }
 
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = $finfo ? finfo_file($finfo, $_FILES['foto']['tmp_name']) : ($_FILES['foto']['type'] ?? '');
-        if ($finfo) finfo_close($finfo);
-        $allowedMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-        if (!in_array($mime, $allowedMime, true)) {
-            $pdo->rollBack();
-            http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Tipo de archivo no permitido']);
-            exit;
-        }
-
-        $ext = strtolower(pathinfo($_FILES['foto']['name'] ?? '', PATHINFO_EXTENSION));
+        $ext = strtolower(pathinfo($_FILES['foto']['name'], PATHINFO_EXTENSION));
         $allowedExt = ['jpg','jpeg','png','webp','gif'];
         if (!in_array($ext, $allowedExt, true)) {
             $pdo->rollBack();
@@ -136,16 +104,9 @@ try {
             exit;
         }
 
-        try {
-            $newFotoName = 'c_' . bin2hex(random_bytes(8)) . '.' . $ext;
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Error interno al procesar la imagen']);
-            exit;
-        }
+        $newFotoName = 'c_' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $dest = $contactosDirReal . '/' . $newFotoName;
 
-        $dest = $contactosDirReal . '/' . basename($newFotoName);
         if (!move_uploaded_file($_FILES['foto']['tmp_name'], $dest)) {
             $pdo->rollBack();
             http_response_code(500);
@@ -153,35 +114,18 @@ try {
             exit;
         }
 
-        $realDest = realpath($dest);
-        if ($realDest === false || strpos($realDest, $contactosDirReal) !== 0) {
-            @unlink($dest);
-            $pdo->rollBack();
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Error al guardar la imagen']);
-            exit;
-        }
-        @chmod($realDest, 0640);
+        @chmod($dest, 0644);
 
         if (!empty($row['foto'])) {
-            $oldName = basename($row['foto']);
-            $oldPath = $contactosDirReal . '/' . $oldName;
-            $oldReal = realpath($oldPath);
-            if ($oldReal !== false && strpos($oldReal, $contactosDirReal) === 0 && is_file($oldReal)) {
-                unlink($oldReal);
+            $oldPath = $contactosDirReal . '/' . basename($row['foto']);
+            if (is_file($oldPath)) {
+                unlink($oldPath);
             }
         }
     }
 
     $sql = 'UPDATE contactos SET nombre = ?, apellido = ?, telefono = ?, email = ?, direccion = ?, notas = ?';
-    $params = [
-        $nombre,
-        $apellido !== '' ? $apellido : null,
-        $telefono !== '' ? $telefono : null,
-        $email !== '' ? $email : null,
-        $direccion !== '' ? $direccion : null,
-        $notas !== '' ? $notas : null
-    ];
+    $params = [$nombre, $apellido ?: null, $telefono ?: null, $email ?: null, $direccion ?: null, $notas ?: null];
     if ($newFotoName !== null) {
         $sql .= ', foto = ?';
         $params[] = $newFotoName;
