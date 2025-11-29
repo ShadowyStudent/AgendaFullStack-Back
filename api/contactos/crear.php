@@ -162,8 +162,9 @@ try {
     $fotoUrl = null;
     if ($fotoFilename !== null) {
         $base = rtrim(getenv('BASE_URL') ?: '', '/');
-        $fotoUrl = $base . '/backend/uploads/contactos/' . rawurlencode(basename($fotoFilename));
+        $fotoUrl = $base . '/uploads/contactos/' . rawurlencode(basename($fotoFilename));
     }
+
 
     echo json_encode(['success' => true, 'data' => ['id' => $contactId, 'nombre' => $nombre, 'foto' => $fotoUrl]], JSON_UNESCAPED_UNICODE);
     exit;
