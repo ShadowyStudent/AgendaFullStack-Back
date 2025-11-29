@@ -7,7 +7,10 @@ require_once __DIR__ . '/../config/jwt.php';
 
 $headers = function_exists('getallheaders') ? getallheaders() : [];
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (!preg_match('/Bearer\s(\S+)/', (string)$authHeader, $m)) {
+if (empty($authHeader) && !empty($_COOKIE['agenda_token'])) {
+    $authHeader = 'Bearer ' . trim($_COOKIE['agenda_token']);
+}
+if (!$authHeader || !preg_match('/Bearer\s(\S+)/', (string)$authHeader, $m)) {
     http_response_code(401);
     echo json_encode(['success' => false, 'message' => 'Token missing']);
     exit;
@@ -23,9 +26,16 @@ if ($secret === '') {
 
 $payload = jwt_validate($token, $secret);
 if (!$payload) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Invalid token']);
-    exit;
+    $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
+    $stmt->execute([$token]);
+    $userRow = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($userRow && !empty($userRow['id'])) {
+        $payload = ['sub' => $userRow['id']];
+    } else {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Invalid token']);
+        exit;
+    }
 }
 
 $usuario_id = isset($payload['sub']) ? (int)$payload['sub'] : 0;
@@ -48,18 +58,22 @@ $filename = $user['avatar'] ?: $user['foto'] ?: null;
 $avatarUrl = null;
 if ($filename) {
     $filename = basename($filename);
-    $scheme = !empty($_SERVER['REQUEST_SCHEME']) ? $_SERVER['REQUEST_SCHEME'] : ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
+    $scheme = (!empty($_SERVER['REQUEST_SCHEME']))
+        ? $_SERVER['REQUEST_SCHEME']
+        : ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $basePath = rtrim(dirname($_SERVER['SCRIPT_NAME'], 2), '/');
-    $avatarUrl = $scheme . '://' . $host . $basePath . '/uploads/users/' . rawurlencode($filename);
+    $avatarUrl = $scheme . '://' . $host . '/uploads/users/' . rawurlencode($filename);
 }
 
-echo json_encode(['success' => true, 'data' => [
-    'id' => (int)($user['id'] ?? 0),
-    'nombre_de_usuario' => $user['nombre_de_usuario'] ?? null,
-    'nombre' => $user['nombre'] ?? $user['nombre_de_usuario'] ?? null,
-    'email' => $user['email'] ?? null,
-    'avatar' => $avatarUrl,
-    'fecha_registro' => $user['fecha_registro'] ?? null
-]], JSON_UNESCAPED_UNICODE);
+echo json_encode([
+    'success' => true,
+    'data' => [
+        'id' => (int)($user['id'] ?? 0),
+        'nombre_de_usuario' => $user['nombre_de_usuario'] ?? null,
+        'nombre' => $user['nombre'] ?? $user['nombre_de_usuario'] ?? null,
+        'email' => $user['email'] ?? null,
+        'avatar' => $avatarUrl,
+        'fecha_registro' => $user['fecha_registro'] ?? null
+    ]
+], JSON_UNESCAPED_UNICODE);
 exit;
