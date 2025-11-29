@@ -42,9 +42,8 @@ if (!empty($authHeader)) {
             $userId = (int)$payload['sub'];
         } else {
             try {
-                $tokenHash = hash('sha256', $authHeader);
-                $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token_hash = ? LIMIT 1');
-                $stmt->execute([$tokenHash]);
+                $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
+                $stmt->execute([$authHeader]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ($row && !empty($row['id'])) {
                     $userId = (int)$row['id'];
