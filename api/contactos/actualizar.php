@@ -188,3 +188,32 @@ try {
     }
     $sql .= ' WHERE id = ? AND usuario_id = ?';
     $params[] = $id;
+    $params[] = $usuario_id;
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    $pdo->commit();
+
+    echo json_encode([
+        'success' => true,
+        'data' => [
+            'id' => $id,
+            'nombre' => $nombre,
+            'apellido' => $apellido,
+            'telefono' => $telefono,
+            'email' => $email,
+            'direccion' => $direccion,
+            'notas' => $notas,
+            'foto' => $newFotoName !== null ? $newFotoName : $row['foto']
+        ]
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Error interno del servidor'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
