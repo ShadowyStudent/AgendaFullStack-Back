@@ -56,7 +56,7 @@ if ($usuario_id <= 0) {
     exit;
 }
 
-$scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = 'https';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $baseUrl = $scheme . '://' . $host;
 $defaultAvatar = $baseUrl . '/uploads/default-avatar.png';

@@ -45,7 +45,7 @@ if ($usuario_id <= 0) {
     exit;
 }
 
-$stmt = $pdo->prepare('SELECT id, nombre_de_usuario, nombre, email, avatar, foto, fecha_registro FROM usuarios WHERE id = ?');
+$stmt = $pdo->prepare('SELECT id, nombre_de_usuario, email, avatar, foto, fecha_registro FROM usuarios WHERE id = ?');
 $stmt->execute([$usuario_id]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$user) {
@@ -54,7 +54,7 @@ if (!$user) {
     exit;
 }
 
-$scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$scheme = 'https';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $baseUrl = $scheme . '://' . $host;
 $defaultAvatar = $baseUrl . '/uploads/default-avatar.png';
@@ -72,7 +72,6 @@ echo json_encode([
     'data' => [
         'id' => (int)($user['id'] ?? 0),
         'nombre_de_usuario' => $user['nombre_de_usuario'] ?? null,
-        'nombre' => $user['nombre'] ?? $user['nombre_de_usuario'] ?? null,
         'email' => $user['email'] ?? null,
         'avatar' => $avatarUrl,
         'fecha_registro' => $user['fecha_registro'] ?? null

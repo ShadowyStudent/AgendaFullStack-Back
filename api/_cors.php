@@ -1,4 +1,5 @@
 <?php
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Expose-Headers: Authorization, X-Total-Count");
 header("Access-Control-Max-Age: 600");
