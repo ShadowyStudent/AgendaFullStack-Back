@@ -56,13 +56,10 @@ if ($usuario_id <= 0) {
     exit;
 }
 
-$envBase = rtrim(getenv('BASE_URL') ?: '', '/');
 $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$basePath = rtrim(dirname(dirname(dirname($_SERVER['SCRIPT_NAME']))), '/\\');
-$uploadsPublicBase = $envBase !== '' ? rtrim($envBase, '/') . '/backend/uploads' : rtrim($scheme . '://' . $host . $basePath, '/') . '/uploads';
-$uploadsRoot = realpath(__DIR__ . '/../../uploads') ?: (__DIR__ . '/../../uploads');
-$uploadsContactosRoot = realpath(__DIR__ . '/../../uploads/contactos') ?: ($uploadsRoot . '/contactos');
+$baseUrl = $scheme . '://' . $host;
+$defaultAvatar = $baseUrl . '/uploads/default-avatar.png';
 
 $page = max(1, intval($_GET['page'] ?? 1));
 $limit = intval($_GET['limit'] ?? 10);
@@ -98,41 +95,28 @@ try {
     }
 
     $result = [];
-    $uploadsRootReal = realpath($uploadsRoot) ?: $uploadsRoot;
-    $uploadsContactosReal = realpath($uploadsContactosRoot) ?: $uploadsContactosRoot;
-
     foreach ($rows as $r) {
         $foto = trim((string)($r['foto'] ?? ''));
         if ($foto === '') {
-            $r['foto'] = null;
+            $r['foto'] = $defaultAvatar;
         } elseif (preg_match('#^https?://#i', $foto)) {
             $r['foto'] = $foto;
         } else {
             $safeBase = basename($foto);
-            $name = rawurlencode($safeBase);
-            $candidate = $uploadsContactosReal . '/' . $safeBase;
-            $candidate2 = $uploadsRootReal . '/' . $safeBase;
-            $resolved = null;
-            if (is_file($candidate)) {
-                $resolved = rtrim($uploadsPublicBase, '/') . '/contactos/' . $name;
-            } elseif (is_file($candidate2)) {
-                $resolved = rtrim($uploadsPublicBase, '/') . '/' . $name;
-            }
-            $r['foto'] = $resolved;
+            $r['foto'] = $baseUrl . '/uploads/contactos/' . rawurlencode($safeBase);
         }
 
         $id = intval($r['id']);
-        $baseApi = rtrim($scheme . '://' . $host . $basePath, '/');
         $r['urls'] = [
-            'read' => $baseApi . '/api/contactos/leer.php?id=' . $id,
-            'update' => $baseApi . '/api/contactos/actualizar.php?id=' . $id,
-            'delete' => $baseApi . '/api/contactos/eliminar.php?id=' . $id
+            'read' => $baseUrl . '/api/contactos/leer.php?id=' . $id,
+            'update' => $baseUrl . '/api/contactos/actualizar.php?id=' . $id,
+            'delete' => $baseUrl . '/api/contactos/eliminar.php?id=' . $id
         ];
         $r['permissions'] = ['can_read' => true, 'can_update' => true, 'can_delete' => true];
         $result[] = $r;
     }
 
-    echo json_encode(['success' => true, 'data' => ['total' => $total, 'page' => $page, 'limit' => $limit, 'contacts' => $result]]);
+    echo json_encode(['success' => true, 'data' => ['total' => $total, 'page' => $page, 'limit' => $limit, 'contacts' => $result]], JSON_UNESCAPED_UNICODE);
     exit;
 } catch (Throwable $e) {
     http_response_code(500);

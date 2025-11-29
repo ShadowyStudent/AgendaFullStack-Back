@@ -54,15 +54,17 @@ if (!$user) {
     exit;
 }
 
+$scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$baseUrl = $scheme . '://' . $host;
+$defaultAvatar = $baseUrl . '/uploads/default-avatar.png';
+
 $filename = $user['avatar'] ?: $user['foto'] ?: null;
-$avatarUrl = null;
 if ($filename) {
     $filename = basename($filename);
-    $scheme = (!empty($_SERVER['REQUEST_SCHEME']))
-        ? $_SERVER['REQUEST_SCHEME']
-        : ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $avatarUrl = $scheme . '://' . $host . '/uploads/users/' . rawurlencode($filename);
+    $avatarUrl = $baseUrl . '/uploads/users/' . rawurlencode($filename);
+} else {
+    $avatarUrl = $defaultAvatar;
 }
 
 echo json_encode([
