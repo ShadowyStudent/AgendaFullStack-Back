@@ -7,4 +7,4 @@ RUN apt-get update && apt-get install -y \
 
 COPY . /var/www/html/
 
-RUN a2enmod rewrite
+RUN a2enmod rewrite headers
