@@ -7,8 +7,6 @@ require_once __DIR__ . '/../../config/jwt.php';
 $authHeader = null;
 if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
-} elseif (!empty($_SERVER['Authorization'])) {
-    $authHeader = $_SERVER['Authorization'];
 } elseif (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
     $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
 } elseif (!empty($_SERVER['HTTP_X_AUTHORIZATION'])) {
@@ -16,38 +14,47 @@ if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
 } elseif (!empty($_SERVER['HTTP_X_AUTH_TOKEN'])) {
     $authHeader = $_SERVER['HTTP_X_AUTH_TOKEN'];
 } elseif (!empty($_POST['token'])) {
-    $authHeader = trim($_POST['token']);
-} elseif (!empty($_GET['token'])) {
-    $authHeader = trim($_GET['token']);
+    $authHeader = $_POST['token'];
 }
 
-if ($authHeader) {
+if (!empty($authHeader)) {
+    $authHeader = trim($authHeader);
+    $authHeader = trim($authHeader, "\"'");
+    $authHeader = urldecode($authHeader);
     if (stripos($authHeader, 'Bearer ') === 0) {
         $authHeader = trim(substr($authHeader, 7));
-    } else {
-        $authHeader = trim($authHeader);
     }
 }
 
-$userId = false;
-$secret = getenv('JWT_SECRET') ?: '';
+$secret = trim(getenv('JWT_SECRET') ?: '');
 if ($secret === '') {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Server configuration error'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
+$userId = false;
 if (!empty($authHeader)) {
-    $payload = jwt_validate($authHeader, $secret);
-    if ($payload && !empty($payload['sub'])) {
-        $userId = (int)$payload['sub'];
-    } else {
-        $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token = ? LIMIT 1');
-        $stmt->execute([$authHeader]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row && !empty($row['id'])) {
-            $userId = (int)$row['id'];
+    $parts = explode('.', $authHeader);
+    if (count($parts) === 3) {
+        $payload = jwt_validate($authHeader, $secret);
+        if ($payload && !empty($payload['sub'])) {
+            $userId = (int)$payload['sub'];
+        } else {
+            try {
+                $tokenHash = hash('sha256', $authHeader);
+                $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE token_hash = ? LIMIT 1');
+                $stmt->execute([$tokenHash]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($row && !empty($row['id'])) {
+                    $userId = (int)$row['id'];
+                }
+            } catch (Throwable $_) {}
         }
+    } else {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Token inválido'], JSON_UNESCAPED_UNICODE);
+        exit;
     }
 }
 
@@ -164,7 +171,6 @@ try {
         $base = rtrim(getenv('BASE_URL') ?: '', '/');
         $fotoUrl = $base . '/uploads/contactos/' . rawurlencode(basename($fotoFilename));
     }
-
 
     echo json_encode(['success' => true, 'data' => ['id' => $contactId, 'nombre' => $nombre, 'foto' => $fotoUrl]], JSON_UNESCAPED_UNICODE);
     exit;
