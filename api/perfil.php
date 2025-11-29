@@ -59,7 +59,7 @@ $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $baseUrl = $scheme . '://' . $host;
 $defaultAvatar = $baseUrl . '/uploads/default-avatar.png';
 
-$filename = $user['avatar'] ?: $user['foto'] ?: null;
+$filename = $user['avatar'] ?: null;
 if ($filename) {
     $filename = basename($filename);
     $avatarUrl = $baseUrl . '/uploads/users/' . rawurlencode($filename);
